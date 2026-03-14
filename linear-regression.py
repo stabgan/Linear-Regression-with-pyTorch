@@ -1,93 +1,79 @@
-#importing the dependencies
+"""
+Linear Regression with PyTorch
+Trains a simple linear model (y = 2x + 1) using SGD and MSE loss.
+"""
 
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 import numpy as np
 
-x_values = [i for i in range(11)] #creating a small dataset for our program
-x_train = np.array(x_values, dtype=np.float32)#converting it into numpy arrays
-x_train = x_train.reshape(-1, 1)#reshaping it with a fake dimension because this is how torch Variable accepts a numpy array .
 
-y_values = [2*i + 1 for i in x_values]#creating a small dataset for our program
-y_train = np.array(y_values, dtype=np.float32)
-y_train = y_train.reshape(-1, 1)
+class LinearRegressionModel(nn.Module):
+    """Single-layer linear regression model."""
 
-'''
-CREATE MODEL CLASS
-'''
-class LinearRegressionModel(nn.Module): # we import all the stuffs of nn.module which automaticaly get fused into our class
-    def __init__(self, input_dim, output_dim):
-        super(LinearRegressionModel, self).__init__()# importing the constructor/initiator of nn.module from superclass
-        self.linear = nn.Linear(input_dim, output_dim)  # linear model 
-    
-    def forward(self, x): # just a common forward method 
-        out = self.linear(x)
-        return out
+    def __init__(self, input_dim: int, output_dim: int):
+        super().__init__()
+        self.linear = nn.Linear(input_dim, output_dim)
 
-'''
-INSTANTIATE MODEL CLASS
-'''
-input_dim = 1
-output_dim = 1
-
-model = LinearRegressionModel(input_dim, output_dim)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.linear(x)
 
 
-#######################
-#  USE GPU FOR MODEL  #
-#######################
+def main():
+    # ── Device configuration ────────────────────────────────────────
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
 
-model.cuda() # if we want to use gpu for acceleration
+    # ── Dataset (y = 2x + 1) ────────────────────────────────────────
+    x_values = list(range(11))
+    x_train = np.array(x_values, dtype=np.float32).reshape(-1, 1)
 
-'''
-INSTANTIATE LOSS CLASS
-'''
+    y_values = [2 * i + 1 for i in x_values]
+    y_train = np.array(y_values, dtype=np.float32).reshape(-1, 1)
 
-criterion = nn.MSELoss() # we use the mean square error loss 
+    # Convert to tensors and move to device
+    inputs = torch.from_numpy(x_train).to(device)
+    labels = torch.from_numpy(y_train).to(device)
 
-'''
-INSTANTIATE OPTIMIZER CLASS
-'''
+    # ── Model, loss, optimizer ──────────────────────────────────────
+    input_dim = 1
+    output_dim = 1
+    model = LinearRegressionModel(input_dim, output_dim).to(device)
 
-learning_rate = 0.01 # we should use a small learning rate so that , the model doesn't skip any better weights
+    criterion = nn.MSELoss()
+    learning_rate = 0.01
+    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
 
-optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate) # we use the Stochastic Gradient Descent as our optimizer
+    # ── Training loop ───────────────────────────────────────────────
+    epochs = 100
+    for epoch in range(1, epochs + 1):
+        model.train()
 
-'''
-TRAIN THE MODEL
-'''
-epochs = 100
-for epoch in range(epochs):
-    epoch += 1
-    # Convert numpy array to torch Variable
-    
-    #######################
-    #  USE GPU FOR MODEL  #
-    #######################
-    if torch.cuda.is_available():
-        inputs = Variable(torch.from_numpy(x_train).cuda())
-        
-    #######################
-    #  USE GPU FOR MODEL  #
-    #######################
-    if torch.cuda.is_available():
-        labels = Variable(torch.from_numpy(y_train).cuda())
-        
-    # Clear gradients w.r.t. parameters
-    optimizer.zero_grad() 
-    
-    # Forward to get output
-    outputs = model(inputs)
-    
-    # Calculate Loss
-    loss = criterion(outputs, labels)
-    
-    # Getting gradients w.r.t. parameters
-    loss.backward()
-    
-    # Updating parameters
-    optimizer.step()
-    
-    # Logging
-    print('epoch {}, loss {}'.format(epoch, loss.data[0]))
+        # Forward pass
+        outputs = model(inputs)
+        loss = criterion(outputs, labels)
+
+        # Backward pass and update
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        if epoch % 10 == 0 or epoch == 1:
+            print(f"Epoch [{epoch:>3}/{epochs}], Loss: {loss.item():.4f}")
+
+    # ── Evaluation ──────────────────────────────────────────────────
+    model.eval()
+    with torch.no_grad():
+        predicted = model(inputs).cpu().numpy()
+
+    print("\nLearned parameters:")
+    for name, param in model.named_parameters():
+        print(f"  {name}: {param.data.cpu().numpy().flatten()}")
+
+    print(f"\nSample predictions (expected y = 2x + 1):")
+    for x, y_pred, y_true in zip(x_values, predicted.flatten(), y_values):
+        print(f"  x={x:>2}  predicted={y_pred:.2f}  actual={y_true}")
+
+
+if __name__ == "__main__":
+    main()
